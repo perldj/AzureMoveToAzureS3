@@ -10,7 +10,9 @@ In addition to the new support, Minio no longer supports Azure, so we are on an 
   
 To configure Marval to use Azure, you use the following format.
 DefaultEndpointsProtocol=https;AccountName=_accountname_;AccountKey=_accountkey_;EndpointSuffix=core.windows.net
+
  _accountname_ is the Storage Account Name
  _accountkey_ is the Storage Account Access key
+ 
  The other required item is Container Name, this is normally msm, however it may not be and is accessed by navigating to your Container, navigating to Containers under Data storage. The Container Name will then be listed there.
 
