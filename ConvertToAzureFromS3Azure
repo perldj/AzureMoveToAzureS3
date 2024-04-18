@@ -4,8 +4,8 @@ param
     [string]$dbName = "",
     [string]$dbUser = "",
     [string]$dbPassword = "",
-    [string]$awsProfile = "",
     [string]$createBucket = "",
+    [string]$containername = "",
     [string]$bucketName = "",
     [string]$tables = "",
     [string]$isMinio = ""
@@ -14,12 +14,12 @@ param
 function Move-DataToAWS([string]$tableName, [string]$primaryKeyColumnName, [string]$contentColumnName, [bool]$isIdColumnInt = $true) {
 $hasResults = 1;
 while ($hasResults -eq 1) {
-    $totalItemsToImport = $msmDatabase.ExecuteWithResults("SELECT COUNT(*) as totalItems FROM $tableName WHERE externalStorageProvider IS NULL;").Tables[0].totalItems
+    $totalItemsToImport = $msmDatabase.ExecuteWithResults("SELECT COUNT(*) as totalItems FROM $tableName WHERE externalStorageProvider like '%AzureBlob%';").Tables[0].totalItems
     $totalItems = 1000;
     if ($totalItems -gt 0) { 
-        echo "Moving $tableName data to AWS S3 storage..."
+        echo "Translating $tableName data to Azure storage..."
     } else {
-        echo "Found no data to move in $tableName table!"
+        echo "Found no data to move in $tableName table"
         return
     }
     
@@ -27,39 +27,33 @@ while ($hasResults -eq 1) {
     $failedCount = 0;
     $successCount = 0;
 
-    $results = $msmDatabase.ExecuteWithResults("SELECT TOP (1000) $primaryKeyColumnName AS id, $contentColumnName AS content FROM $tableName WHERE externalStorageProvider IS NULL;")
+    $results = $msmDatabase.ExecuteWithResults("SELECT TOP (1000) $primaryKeyColumnName AS id, $contentColumnName AS content FROM $tableName WHERE externalStorageProvider like '%{""Type"":""S3""%';")
     if ($results) {
-
     $results.Tables[0] | ForEach-Object {
         $id = $_.id
         $content = $_.content
-        $guid = [guid]::NewGuid()
+        "Have content as $content"
+
+        $jsonObject = ConvertFrom-Json $content
+        
+
+        "Mutating json object"
+        $jsonObject.Type = "AzureBlob"
+        $jsonObject.Region = ""
+        $jsonObject.PSObject.Properties.Remove('Region')
+        $bucketname = $jsonObject.BucketName
+        $jsonObject.ServiceUrl = "https://$containername.core.windows.net/$bucketname"
+
+        $newJsonString = $jsonObject | ConvertTo-Json
+
+        "New mutated string is $newJsonString"
         $externalStorageProvider = "{`"Type`":`"S3`",`"ExternalStorageKey`":`"$guid`",`"BucketName`":`"$bucketName`",`"Region`":{`"SystemName`":`"$($region.Region)`",`"DisplayName`":`"$($region.Name)`"}}"
         try {
-
-            # lets do the actual move
-            if ($content.GetType().Name -eq "byte[]") { 
-               $memoryStream = New-Object -TypeName 'System.IO.MemoryStream' -ArgumentList (,$content)
-               if ($isMinio -eq 1) {
-                  Write-S3Object -EndpointUrl http://localhost:9000 -BucketName $bucketName -Stream $memoryStream -Key $guid -CannedACLName bucket-owner-full-control
-               } else {
-                  Write-S3Object -BucketName $bucketName -Stream $memoryStream -Key $guid -CannedACLName bucket-owner-full-control
-               }
-            
-            } elseif ($content.GetType().Name -eq "string") {
-               if ($isMinio -eq 1) {
-                  Write-S3Object -EndpointUrl http://localhost:9000 -BucketName $bucketName -Content $content -Key $guid -CannedACLName bucket-owner-full-control
-               } else {
-                  Write-S3Object -BucketName $bucketName -Content $content -Key $guid -CannedACLName bucket-owner-full-control
-               }
-              
-            }
-
-            # update msm databse to null content and specify externalStorageProvider			
+			
 			if($isIdColumnInt) {
-				$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = $id")
+				#$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = $id")
 			} else {
-				$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = '$id'")
+			#	$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = '$id'")
 			}
 			
 			$successCount++
@@ -69,7 +63,7 @@ while ($hasResults -eq 1) {
         } finally {
             $progress++;
             $percentageComplete = ($progress / $totalItems) * 100
-            Write-Progress -Activity "Move in Progress" -Status "$percentageComplete% Complete:" -PercentComplete $percentageComplete;
+           # Write-Progress -Activity "Move in Progress" -Status "$percentageComplete% Complete:" -PercentComplete $percentageComplete;
         }
     }
     echo "Total items are $totalItemsToImport";
@@ -89,7 +83,7 @@ if (!$isAdmin) {
         # we're not running elevated - so try to relaunch as administrator
         echo "Starting elevated PowerShell instance."
         $newProcess = New-Object System.Diagnostics.ProcessStartInfo "PowerShell"
-        $newProcess.Arguments = @("-NoProfile","-NoLogo", $myInvocation.MyCommand.Definition, "-dbServer `"$dbServer`" -dbName `"$dbName`" -dbUser `"$dbUser`" -dbPassword `"$dbPassword`" -awsProfile `"$awsProfile`" -createBucket `"$createBucket`" -bucketName `"$bucketName`" -tables `"$tables`"")
+        $newProcess.Arguments = @("-NoProfile","-NoLogo", $myInvocation.MyCommand.Definition, "-containerName `"$containername`" -dbServer `"$dbServer`" -dbName `"$dbName`" -dbUser `"$dbUser`" -dbPassword `"$dbPassword`" -tables `"$tables`"")
         $newProcess.Verb = "runas"
         [System.Diagnostics.Process]::Start($newProcess)
     }
@@ -125,12 +119,6 @@ if (!$sqlServerModules) {
 }
 
 # ensure we have the AWS CLI installed
-$cmdOutput = aws --version
-
-if (!$cmdOutput.StartsWith("aws-cli")) {
-    echo "AWS CLI not found! Please install AWS CLI and retry the operation. https://awscli.amazonaws.com/AWSCLIV2.msi"
-    exit
-}
 
 # ensure we have the AWSPowerShell module installed
 $awsPowerShellModules = Get-Module -ListAvailable -Name AWSPowerShell
