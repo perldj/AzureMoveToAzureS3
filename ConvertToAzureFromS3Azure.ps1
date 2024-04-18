@@ -29,44 +29,31 @@ while ($hasResults -eq 1) {
     $failedCount = 0;
     $successCount = 0;
 
-    $results = $msmDatabase.ExecuteWithResults("SELECT TOP (100) $primaryKeyColumnName AS id, $contentColumnName AS content FROM $tableName WHERE requestId = '105' AND externalStorageProvider like '%S3%';")
+    $results = $msmDatabase.ExecuteWithResults("SELECT TOP (1000) $primaryKeyColumnName AS id, $contentColumnName AS content FROM $tableName WHERE externalStorageProvider like '%S3%';")
     if ($results) {
     $results.Tables[0] | ForEach-Object {
         $id = $_.id
         $content = $_.content
-        "Have content as $content"
+       # "Have content as $content"
+        $oldType = $jsonObject.Type;
 
         $jsonObject = ConvertFrom-Json $content
         
         $jsonObject.Type = "AzureBlob"
-        $jsonObject.PSObject.Properties.Add('ServiceUrl')
-        
-        
         $bucketname = $jsonObject.BucketName
-        $jsonObject.ServiceUrl = "https://$containername.core.windows.net/$bucketname"
-        
-        # Remove unnecessary properties
         $jsonObject.PSObject.Properties.Remove('Region')
         $jsonObject.PSObject.Properties.Remove('ForcePathStyle')
-        
-        # Output the updated JSON object
-        "Json object is $jsonObject"
-        $newJsonString = $jsonObject | ConvertTo-Json
-
-
-        "New mutated string is $newJsonString"
-         exit;
-        # $externalStorageProvider = "{`"Type`":`"S3`",`"ExternalStorageKey`":`"$guid`",`"BucketName`":`"$bucketName`",`"Region`":{`"SystemName`":`"$($region.Region)`",`"DisplayName`":`"$($region.Name)`"}}"
+        $jsonObject | Add-Member -MemberType NoteProperty -Name ServiceUrl -Value "https://$containername.blob.core.windows.net/$bucketname"
+       # "Json object is $jsonObject"
+        $newJsonString = $jsonObject | ConvertTo-Json -Compress
+       # "New mutated string is $newJsonString"
         try {
 			
-			#if($isIdColumnInt) {
-                "Updating $tableName with content column as $contentColumnName json string $newJsonString primary key column name is $primaryKeyColumnName  "
+                #"Updating $tableName with content column as $contentColumnName json string $newJsonString primary key column name is $primaryKeyColumnName  "
+                if ($oldType -ne "S3") { # Just run a last check in case
 		      $msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = '$newJsonString' WHERE $primaryKeyColumnName = $id");
-              exit;
-			# else {
-			#	$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = '$id'")
-			#
-			
+                }
+             
 			$successCount++
         } catch {
             $failedCount++;
@@ -79,7 +66,7 @@ while ($hasResults -eq 1) {
     }
     echo "Total items are $totalItemsToImport";
     if ($totalItemsToImport -gt 0) {
-        echo "Move completed. Successfully moved $successCount/$totalItems rows to storage, now have $totalItemsToImport rows left to transfer..."
+        echo "Successfully translated $successCount/$totalItems rows to use Azure storage, now have $totalItemsToImport rows left..."
     } else {
      $hasResults = 0;
     }
@@ -126,25 +113,6 @@ if (!$sqlServerModules) {
         Install-Module SqlServer -Scope CurrentUser
         Import-Module SqlServer
         [Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.Smo") | Out-Null
-    }
-}
-
-# ensure we have the AWS CLI installed
-
-# ensure we have the AWSPowerShell module installed
-$awsPowerShellModules = Get-Module -ListAvailable -Name AWSPowerShell
-
-if ($awsPowerShellModules) {
-    Import-Module AWSPowerShell
-}
-
-if (!$awsPowerShellModules) {
-    try {
-        Set-AWSCredential
-    } catch {
-        echo "Installing AWSPowerShell module..."
-        Install-Module AWSPowerShell -Scope CurrentUser
-        Import-Module AWSPowerShell
     }
 }
 
