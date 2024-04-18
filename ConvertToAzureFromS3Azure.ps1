@@ -12,14 +12,16 @@ param
 )
 
 function Move-DataToAWS([string]$tableName, [string]$primaryKeyColumnName, [string]$contentColumnName, [bool]$isIdColumnInt = $true) {
+    "Running Move Data Function"
 $hasResults = 1;
 while ($hasResults -eq 1) {
-    $totalItemsToImport = $msmDatabase.ExecuteWithResults("SELECT COUNT(*) as totalItems FROM $tableName WHERE externalStorageProvider like '%AzureBlob%';").Tables[0].totalItems
-    $totalItems = 1000;
+    $totalItemsToImport = $msmDatabase.ExecuteWithResults("SELECT COUNT(*) as totalItems FROM $tableName WHERE externalStorageProvider like '%S3%';").Tables[0].totalItems
+    
+    $totalItems = 100;
     if ($totalItems -gt 0) { 
-        echo "Translating $tableName data to Azure storage..."
+         "Translating $tableName data to Azure storage..."
     } else {
-        echo "Found no data to move in $tableName table"
+         "Found no data to move in $tableName table"
         return
     }
     
@@ -27,7 +29,7 @@ while ($hasResults -eq 1) {
     $failedCount = 0;
     $successCount = 0;
 
-    $results = $msmDatabase.ExecuteWithResults("SELECT TOP (1000) $primaryKeyColumnName AS id, $contentColumnName AS content FROM $tableName WHERE externalStorageProvider like '%{""Type"":""S3""%';")
+    $results = $msmDatabase.ExecuteWithResults("SELECT TOP (100) $primaryKeyColumnName AS id, $contentColumnName AS content FROM $tableName WHERE requestId = '105' AND externalStorageProvider like '%S3%';")
     if ($results) {
     $results.Tables[0] | ForEach-Object {
         $id = $_.id
@@ -36,25 +38,34 @@ while ($hasResults -eq 1) {
 
         $jsonObject = ConvertFrom-Json $content
         
-
-        "Mutating json object"
         $jsonObject.Type = "AzureBlob"
-        $jsonObject.Region = ""
-        $jsonObject.PSObject.Properties.Remove('Region')
+        $jsonObject.PSObject.Properties.Add('ServiceUrl')
+        
+        
         $bucketname = $jsonObject.BucketName
         $jsonObject.ServiceUrl = "https://$containername.core.windows.net/$bucketname"
-
+        
+        # Remove unnecessary properties
+        $jsonObject.PSObject.Properties.Remove('Region')
+        $jsonObject.PSObject.Properties.Remove('ForcePathStyle')
+        
+        # Output the updated JSON object
+        "Json object is $jsonObject"
         $newJsonString = $jsonObject | ConvertTo-Json
 
+
         "New mutated string is $newJsonString"
-        $externalStorageProvider = "{`"Type`":`"S3`",`"ExternalStorageKey`":`"$guid`",`"BucketName`":`"$bucketName`",`"Region`":{`"SystemName`":`"$($region.Region)`",`"DisplayName`":`"$($region.Name)`"}}"
+         exit;
+        # $externalStorageProvider = "{`"Type`":`"S3`",`"ExternalStorageKey`":`"$guid`",`"BucketName`":`"$bucketName`",`"Region`":{`"SystemName`":`"$($region.Region)`",`"DisplayName`":`"$($region.Name)`"}}"
         try {
 			
-			if($isIdColumnInt) {
-				#$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = $id")
-			} else {
+			#if($isIdColumnInt) {
+                "Updating $tableName with content column as $contentColumnName json string $newJsonString primary key column name is $primaryKeyColumnName  "
+		      $msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = '$newJsonString' WHERE $primaryKeyColumnName = $id");
+              exit;
+			# else {
 			#	$msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = NULL, externalStorageProvider = '$externalStorageProvider' WHERE $primaryKeyColumnName = '$id'")
-			}
+			#
 			
 			$successCount++
         } catch {
@@ -137,53 +148,6 @@ if (!$awsPowerShellModules) {
     }
 }
 
-# check if we must use the default profile or the user specified profile as well as if it has a region set
-$awsProfile = if (!$awsProfile) {"default"} else {$awsProfile}
-
-if ((Get-AWSCredential -ListProfileDetail | Where-Object {$_.ProfileName -eq $awsProfile}).count -eq 1) {
-    Set-AWSCredential -ProfileName $awsProfile # set default region for this session using the profiles region
-    Set-DefaultAWSRegion (aws configure get region --profile $awsProfile)
-    $region = (Get-DefaultAWSRegion) # set global region for access by functions 
-
-    # ensure a default region has been set using the region found on the profile specified
-    if ((Get-DefaultAWSRegion).count -eq 0) {
-        echo "Please set a default region on the AWS profile you provided and try again"
-        exit
-    }
-
-    echo "Using AWS profile: $awsProfile"
-    echo "Using AWS region: $($region.Region)"
-} else {
-    echo "No profile found for $awsProfile, please specify -awsProfile with a valid profile or create the missing profile"
-    exit
-}
-
-# check if we must create or use an existing bucket and whether or not the existing bucket exists and is valid
-if($createBucket) {
-    echo "Creating a new bucket named $createBucket..."
-    New-S3Bucket -BucketName $createBucket | Out-Null
-    $bucketName = $createBucket # set bucketname 
-} elseif($bucketName) {
-   if ($isMinio -eq 1) {
-
-    if ((Get-S3Bucket -EndpointUrl http://localhost:9000 | Where-Object {$_.BucketName -eq $bucketName}).count -eq 0) {
-        echo "Bucket $bucketName not found. Please specify a valid existing bucket name or a new one with -createBucket"
-        exit
-    }
-    }
-    else {
-  
-       if ((Get-S3Bucket | Where-Object {$_.BucketName -eq $bucketName}).count -eq 0) {
-        echo "Bucket $bucketName not found. Please specify a valid existing bucket name or a new one with -createBucket"
-        exit
-    }
-    
-    }
-} else {
-    echo "-createBucket or -bucketName must be specified"
-    exit
-}
-
 # ensure db credentials are specified
 if (!$dbServer -or !$dbName -or !$dbUser) {
     echo "-dbServer, -dbName and -dbUser MUST be specified!"
@@ -192,9 +156,11 @@ if (!$dbServer -or !$dbName -or !$dbUser) {
 
 # ensure tables are specified
 if(!$tables) {
-    echo "Please specify tables to move data to S3 API using -tables table1,table2 table1 and table2 are simply examples."
+    echo "Please specify tables to specify which table/s you would like to work on."
     exit
 }
+
+"Connecting with server $dbServer username $dbUser passsword $dbPassword server $dbServer dname $dbName"
 
 $server = New-Object Microsoft.SqlServer.Management.SMO.Server(New-Object Microsoft.SqlServer.Management.Common.ServerConnection($dbServer, $dbUser, $dbPassword))
 $msmDatabase = New-Object Microsoft.SqlServer.Management.SMO.Database($server, $dbName)
@@ -202,9 +168,9 @@ $msmDatabase = New-Object Microsoft.SqlServer.Management.SMO.Database($server, $
 $tableArray = $tables.Split(",")
 Foreach ($table in $tableArray) {
     switch($table) {
-        "queuedNotification" { Move-DataToAWS -tableName queuedNotification -primaryKeyColumnName queuedNotificationId -contentColumnName content }
-        "attachment" { Move-DataToAWS -tableName attachment -primaryKeyColumnName attachmentId -contentColumnName content }
-		"note" { Move-DataToAWS -tableName note -primaryKeyColumnName noteIdentifier -contentColumnName content }
-		"richTextImage" { Move-DataToAWS -tableName richTextImage -primaryKeyColumnName fileName -contentColumnName content -isIdColumnInt $false }
+        "queuedNotification" { Move-DataToAWS -tableName queuedNotification -primaryKeyColumnName queuedNotificationId -contentColumnName externalStorageProvider }
+        "attachment" { Move-DataToAWS -tableName attachment -primaryKeyColumnName attachmentId -contentColumnName externalStorageProvider }
+		"note" { Move-DataToAWS -tableName note -primaryKeyColumnName noteIdentifier -contentColumnName externalStorageProvider }
+		"richTextImage" { Move-DataToAWS -tableName richTextImage -primaryKeyColumnName fileName -contentColumnName externalStorageProvider  }
     }
 }
