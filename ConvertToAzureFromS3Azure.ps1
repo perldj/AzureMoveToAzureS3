@@ -36,6 +36,7 @@ while ($hasResults -eq 1) {
         $content = $_.content
        # "Have content as $content"
         
+       $jsonObject = New-Object -TypeName PSObject
 
         $jsonObject = ConvertFrom-Json $content
         $oldType = $jsonObject.Type;
@@ -43,7 +44,7 @@ while ($hasResults -eq 1) {
         $bucketname = $jsonObject.BucketName
         $jsonObject.PSObject.Properties.Remove('Region')
         $jsonObject.PSObject.Properties.Remove('ForcePathStyle')
-        $jsonObject | Add-Member -MemberType NoteProperty -Name ServiceUrl -Value "https://$containername.blob.core.windows.net/$bucketname"
+        $jsonObject | Add-Member -MemberType NoteProperty -Force -Name ServiceUrl -Value "https://$containername.blob.core.windows.net/$bucketname"
        # "Json object is $jsonObject"
         $newJsonString = $jsonObject | ConvertTo-Json -Compress
        # "New mutated string is $newJsonString"
