@@ -35,10 +35,10 @@ while ($hasResults -eq 1) {
         $id = $_.id
         $content = $_.content
        # "Have content as $content"
-        $oldType = $jsonObject.Type;
+        
 
         $jsonObject = ConvertFrom-Json $content
-        
+        $oldType = $jsonObject.Type;
         $jsonObject.Type = "AzureBlob"
         $bucketname = $jsonObject.BucketName
         $jsonObject.PSObject.Properties.Remove('Region')
@@ -49,8 +49,9 @@ while ($hasResults -eq 1) {
        # "New mutated string is $newJsonString"
         try {
 			
-                #"Updating $tableName with content column as $contentColumnName json string $newJsonString primary key column name is $primaryKeyColumnName  "
-                if ($oldType -ne "S3") { # Just run a last check in case
+                
+                # Just run a last check in case to make sure the old value of Type is S3. This ensures that even if S3 exists in the string, we are still checking the Type before we run the query.
+                if ($oldType -eq "S3") { 
 		      $msmDatabase.ExecuteNonQuery("UPDATE $tableName SET $contentColumnName = '$newJsonString' WHERE $primaryKeyColumnName = $id");
                 }
              

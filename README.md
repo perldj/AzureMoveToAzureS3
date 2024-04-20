@@ -1,5 +1,5 @@
 # AzureMoveToAzureS3
-A script for current customers who are moving from using Azure/Minio to pure Azure to store attachments
+A script for current customers who are using minion to move them from using Azure/Minio to pure Azure to store attachments
 
 This script is loosely based on this script here https://bitbucket.org/marvalsoftware/aws-scripts/src/master/Migration/.
 
