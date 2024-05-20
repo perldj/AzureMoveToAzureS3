@@ -44,6 +44,9 @@ To view the progress of the script, you can run the following queries (for each 
 These queries will give the number of rows remaining to copy.
 
 SELECT count(*) FROM queuedNotification WHERE externalStorageProvider like '%S3%'
+
 SELECT count(*)  FROM attachment WHERE externalStorageProvider like '%S3%'
+
 SELECT count(*) FROM note WHERE externalStorageProvider like '%S3%'
+
 SELECT count(*)  FROM richTextImage WHERE externalStorageProvider like '%S3%'
