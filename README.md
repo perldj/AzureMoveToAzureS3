@@ -38,7 +38,7 @@ DefaultEndpointsProtocol=https;AccountName=03ae8f2f8........3533;AccountKey=Zzd7
 
 The values in Minio are also then used to construct the command to convert the connections strings across to Azure format as per the example below.
 
-.\ConvertToAzureFromS3Azure.ps1 -containerName "03ae8f2f8........3533" -dbServer "marvalaucloud.database.windows.net" -dbName "MSMGoodStartTest" -dbUser "_dbusername_" -dbPassword "_dbpassword_" -tables "queuedNotification"
+.\ConvertToAzureFromS3Azure.ps1 -containerName "03ae8f2f8........3533" -dbServer "_servername_.database.windows.net" -dbName "_dbname__" -dbUser "_dbusername_" -dbPassword "_dbpassword_" -tables "queuedNotification"
 
 
 To view the progress of the script, you can run the following queries (for each relevant table).
