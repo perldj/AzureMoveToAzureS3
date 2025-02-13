@@ -5,8 +5,8 @@ This script is loosely based on this script here https://bitbucket.org/marvalsof
 
 
 **History**
-Previously, Marval did not surpport Azure attachmnets so we started using a program called Minio to store attachments in Azure and translate them using Minio, which allowed us to use an 'S3 endpoint' pointing to Minio, which would then translate these attachments into Azure.
-This is no longer required and we are able to use Azure natively from Marval, since Marval now suports Azure natively.
+Previously, Marval did not support Azure attachments so we started using a program called Minio to store attachments in Azure and translate them using Minio, which allowed us to use an 'S3 endpoint' pointing to Minio, which would then translate these attachments into Azure.
+This is no longer required and we are able to use Azure natively from Marval, since Marval now supports Azure natively.
 In addition to the new support, Minio no longer supports Azure, so we are on an old unsupported version of Minio.
 
   
@@ -32,7 +32,7 @@ In here you will find the storage account information as per the image below.
 You can then use this in the Marval configuration, this is required prior to running the script to ensure that the customer will be able to access attachments as the connection string is converted over.
 ![File to open](images/msmconfigure.png)
 
-The Connection String format is listed above, this customer connection string is as follows with some ifnormation ommited with ... for security.
+The Connection String format is listed above, this customer connection string is as follows with some information omitted with ... for security.
 DefaultEndpointsProtocol=https;AccountName=03ae8f2f8........3533;AccountKey=Zzd74Td....ABo2dW3Sto...zUZCmA+AStnGOGNg==;EndpointSuffix=core.windows.net
 
 
